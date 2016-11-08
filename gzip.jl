@@ -4,24 +4,24 @@ type BitStream
 end
 BitStream(io::IO) = BitStream(io, BitVector(0))
 
-typealias GzipFlags Uint8
+typealias GzipFlags UInt8
 
 type GzipHeader
-  id::Vector{Uint8} # length 2
-  compression_method::Uint8
+  id::Vector{UInt8} # length 2
+  compression_method::UInt8
   flags::GzipFlags
-  mtime::Vector{Uint8} # length 4
-  extra_flags::Uint8
-  os::Uint8
+  mtime::Vector{UInt8} # length 4
+  extra_flags::UInt8
+  os::UInt8
 end
 
 type GzipMetadata
   header::GzipHeader
-  xlen::Uint16
+  xlen::UInt16
   extra::ASCIIString
   fname::ASCIIString
   fcomment::ASCIIString
-  crc16::Uint16
+  crc16::UInt16
 end
 
 type BlockFormat
@@ -30,23 +30,23 @@ type BlockFormat
 end
 
 type HuffmanHeader
-    hlit::Uint8
-    hdist::Uint8
-    hclen::Uint8
+    hlit::UInt8
+    hdist::UInt8
+    hclen::UInt8
 end
 
 Base.read(bs::BitStream, ::Type{HuffmanHeader}) = HuffmanHeader(
-    convert(Uint8, read_bits_inv(bs, 5)), 
-    convert(Uint8, read_bits_inv(bs, 5)), 
-    convert(Uint8, read_bits_inv(bs, 4)))
+    convert(UInt8, read_bits_inv(bs, 5)), 
+    convert(UInt8, read_bits_inv(bs, 5)), 
+    convert(UInt8, read_bits_inv(bs, 4)))
 
 
 
-has_ext(flags::GzipFlags)     = bool(0x01 & flags)
-has_crc(flags::GzipFlags)     = bool(0x02 & flags)
-has_extra(flags::GzipFlags)   = bool(0x04 & flags)
-has_name(flags::GzipFlags)    = bool(0x08 & flags)
-has_comment(flags::GzipFlags) = bool(0x10 & flags)
+has_ext(flags::GzipFlags)     = 0!=(0x01 & flags)
+has_crc(flags::GzipFlags)     = 0!=(0x02 & flags)
+has_extra(flags::GzipFlags)   = 0!=(0x04 & flags)
+has_name(flags::GzipFlags)    = 0!=(0x08 & flags)
+has_comment(flags::GzipFlags) = 0!=(0x10 & flags)
 
 function Base.read(bs::BitStream, ::Type{BlockFormat})
     bits = read_bits(bs, 3)
@@ -57,26 +57,26 @@ end
 
 function Base.read(file::IO, ::Type{GzipHeader})
     id = readbytes(file, 2)
-    compression_method = read(file, Uint8)
+    compression_method = read(file, UInt8)
     flags = read(file, GzipFlags)
     mtime = readbytes(file, 4)
-    extra_flags = read(file, Uint8)
-    os = read(file, Uint8)
-    assert(id == [0x1f, 0x8b], "Gzip magic bytes not present")
-    assert(compression_method == 8, "Unknown compression method")
+    extra_flags = read(file, UInt8)
+    os = read(file, UInt8)
+    @assert id==[0x1f, 0x8b] "Gzip magic bytes not present"
+    @assert compression_method==8 "Unknown compression method"
     return GzipHeader(id, compression_method, flags, mtime, extra_flags, os)
 end
 
 function Base.read(file::IO, ::Type{GzipMetadata})
     header = read(file, GzipHeader)
-    xlen::Uint16 = 0
+    xlen::UInt16 = 0
     extra::ASCIIString = ""
     fname::ASCIIString = ""
     fcomment::ASCIIString = ""
-    crc16::Uint16 = 0
+    crc16::UInt16 = 0
     # TODO: There are only 4 checks here. WHY?!?? Is this a bug?
     if has_extra(header.flags)
-        xlen = read(file, Uint16)
+        xlen = read(file, UInt16)
         extra = ASCIIString(readbytes(file, xlen))
     end
     if has_name(header.flags)
@@ -86,13 +86,13 @@ function Base.read(file::IO, ::Type{GzipMetadata})
         fname = ASCIIString(readuntil(file, 0x00)[1:end-1])
     end
     if has_crc(header.flags)
-        crc16 = read(file, Uint16)
+        crc16 = read(file, UInt16)
     end
     return GzipMetadata(header, xlen, extra, fname, fcomment, crc16)
 end
 
 
-function make_bitvector(n::Uint8)
+function make_bitvector(n::UInt8)
     bits = BitVector(8)
     for i=1:8
         bits[i] = n & 0x1
@@ -104,7 +104,7 @@ end
 function read_bits(stream::BitStream, n)
     cached_bits = stream.bv
     while n > length(cached_bits)
-        byte = read(stream.stream, Uint8)
+        byte = read(stream.stream, UInt8)
         new_bits = make_bitvector(byte)
         cached_bits = vcat(cached_bits, new_bits)
     end
@@ -139,7 +139,7 @@ function create_code_table(hclens, labels)
     labels = labels[nonzero_indices]
 
     sorted_pairs = sort([x for x=zip(hclens, labels)])
-    answer = Array(Uint16, length(hclens))
+    answer = Array(UInt16, length(hclens))
     prev_code_len = 0
     for (i, (code_len, label)) = enumerate(sorted_pairs)
         if i == 1
@@ -157,7 +157,7 @@ function create_code_table(hclens, labels)
 end
 
 function make_bit_vector(n::Any, len::Any)
-    vec = BitVector(int(len))
+    vec = BitVector(Int(len))
     for i=1:len
         vec[len - i + 1] = n & 1
         n >>= 1
@@ -187,7 +187,7 @@ function Base.setindex!(node::InternalNode, value::Node, dir::Bool)
         node.one = value
     end
 end
-Base.getindex(node::InternalNode, dir::Integer) = bool(dir) ? node.one : node.zero
+Base.getindex(node::InternalNode, dir::Integer) = (dir!=0) ? node.one : node.zero
 function Base.getindex(node::InternalNode, code)
     for (i, bit) = enumerate(code)
         node = node[bit]
@@ -239,7 +239,7 @@ end
 
 function read_second_tree_codes(bs::BitStream, head::HuffmanHeader, tree::HuffmanTree)
     n_to_read = head.hlit + head.hdist + 258
-    vals = Array(Uint8, n_to_read)
+    vals = Array(UInt8, n_to_read)
     i = 1
     while i <= n_to_read
         code_len = read_huffman_bits(bs, tree)
@@ -297,7 +297,7 @@ end
 function copy_text!(decoded_text, distance, len)
     j = length(decoded_text) - distance + 1
     i = length(decoded_text) + 1
-    append!(decoded_text, zeros(Uint8, len))
+    append!(decoded_text, zeros(UInt8, len))
     while len > 0
         decoded_text[i] = decoded_text[j]
         i += 1
@@ -311,7 +311,7 @@ function inflate(file::IO, out::IO=STDOUT)
     read(file, GzipMetadata) # Ignore headers
     bs = BitStream(file)
 
-    decoded_text = Uint8[]
+    decoded_text = UInt8[]
     while true
         bf = read(bs, BlockFormat)
         if bf.block_type == [false, true]
@@ -334,11 +334,11 @@ function inflate_block!(decoded_text, bs::BitStream)
     codes = read_second_tree_codes(bs, head, first_tree)
     
     literal_codes = codes[1:257 + head.hlit]
-    lit_code_table = create_code_table(literal_codes, [0:length(literal_codes)-1])
+    lit_code_table = create_code_table(literal_codes, collect(0:length(literal_codes)-1))
     literal_tree = create_huffman_tree(lit_code_table)
     
     distance_codes = codes[end-head.hdist:end]
-    dist_code_table = create_code_table(distance_codes, [0:length(distance_codes)-1])
+    dist_code_table = create_code_table(distance_codes, collect(0:length(distance_codes)-1))
     distance_tree = create_huffman_tree(dist_code_table)
     
     return inflate_block!(decoded_text, bs, literal_tree, distance_tree)
@@ -351,7 +351,7 @@ function inflate_block!(decoded_text, bs::BitStream, literal_tree::HuffmanTree, 
             break
         end
         if code <= 255 # ASCII character
-            append!(decoded_text, [convert(Uint8, code)])
+            append!(decoded_text, [convert(UInt8, code)])
         else # Pointer to previous text
             len = read_length_code(bs, code)
             distance = read_distance_code(bs, distance_tree)
@@ -361,4 +361,4 @@ function inflate_block!(decoded_text, bs::BitStream, literal_tree::HuffmanTree, 
     return decoded_text
 end
 
-display_ascii(arr) = ASCIIString(convert(Vector{Uint8}, arr))
+display_ascii(arr) = ASCIIString(convert(Vector{UInt8}, arr))
